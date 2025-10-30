@@ -10,6 +10,7 @@ from datasets import SpatialStreamDataset, TwoStreamVideoDataset, TemporalStream
 from trainer import Trainer
 from utils import load_metrics
 from config import *
+from transforms import *
 
 def get_args():
     parser = argparse.ArgumentParser(description="Train Spatial or Temporal Stream CNN")
@@ -34,21 +35,9 @@ def main():
     print(f"\nTraining {args.stream.upper()} stream.\n")
 
     # Data transformations
-    train_tfms_rgb = T.Compose([
-        T.Resize(256),
-        T.RandomResizedCrop(224, scale=(0.8, 1.0)),
-        T.RandomHorizontalFlip(),
-        T.ColorJitter(0.4, 0.4, 0.4, 0.2),
-        T.ToTensor(),
-        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-    ])
-    eval_tfms_rgb = T.Compose([
-        T.Resize(256),
-        T.CenterCrop(224),
-        T.ToTensor(),
-        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-    ])
-    train_tfms_flow = T.Compose([T.Resize(224)])
+    train_tfms_rgb = spatial_train_tfms()
+    eval_tfms_rgb = spatial_eval_tfms()
+    train_tfms_flow = flow_tfms()
 
     # Loading datasets
     if args.stream == "spatial":
