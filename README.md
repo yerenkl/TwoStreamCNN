@@ -6,19 +6,26 @@ The architecture follows the **Two-Stream CNN** introduced by *Simonyan & Zisser
 ## Project Structure
 
 ```bash
-$ tree
 TwoStreamCNN/
-│
-├── main.py           → Main training entry point
-├── test.py           → Evaluate trained models (spatial, temporal, or fused)
-│
-├── model.py          → SpatialStream and TemporalStream architectures
-├── datasets.py       → Dataset loaders for RGB and Optical Flow inputs
-├── trainer.py        → PyTorch Trainer (training + validation)
-├── utils.py          → Metrics, checkpointing, and helper functions
-├── config.py         → Global constants (paths, hyperparameters)
-│
-└── results/          → Output directory for checkpoints and logs
+├── __init__.py
+├── train.py
+├── test.py
+├── config.py
+├── model/
+│   ├── __init__.py
+│   └── model.py
+├── data/
+│   ├── __init__.py
+│   └── datasets.py
+├── engine/
+│   ├── __init__.py
+│   └── trainer.py
+├── transforms/
+│   ├── __init__.py
+│   └── transforms.py
+└── utils/
+    ├── __init__.py
+    └── utils.py
 ```
 
 ## Quick Start
@@ -30,6 +37,10 @@ python train.py --stream spatial --epochs 25 --batch_size 64 --lr 1e-4
 ### 2-Train the Temporal Stream (Optical Flow)
 ```bash
 python train.py --stream temporal --epochs 25 --batch_size 8 --lr 1e-4
+```
+### 3-Evaluate both model and fusion on the Test Set
+```bash
+python test.py
 ```
 ### Command-Line Arguments
 | Argument         | Description                                     | Default                               |

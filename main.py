@@ -6,11 +6,11 @@ from torch.utils.data import DataLoader
 from torchvision import transforms as T
 
 from model import SpatialStream, TemporalStream
-from datasets import SpatialStreamDataset, TwoStreamVideoDataset, TemporalStreamDataset
-from trainer import Trainer
-from utils import load_metrics
+from data.datasets import SpatialStreamDataset, TemporalStreamDataset, TwoStreamVideoDataset
+from engine.trainer import Trainer
+from utils import save_metrics, load_metrics
+from data.transforms import spatial_train_tfms, spatial_eval_tfms, flow_tfms
 from config import *
-from transforms import *
 
 def get_args():
     parser = argparse.ArgumentParser(description="Train Spatial or Temporal Stream CNN")
@@ -25,6 +25,7 @@ def get_args():
     parser.add_argument("--root_dir", default=ROOT_DIR)
     parser.add_argument("--save_dir", default=SAVE_DIR)
     parser.add_argument("--num_workers", type=int, default=4)
+
     return parser.parse_args()
 
 def main():
@@ -78,7 +79,6 @@ def main():
 
     print(f"Best validation loss: {trainer.best_val_loss:.4f}")
     print(f"Metrics saved at: {trainer.metrics_path}")
-
 
 if __name__ == "__main__":
     main()

@@ -1,110 +1,89 @@
 import os
-import random
-import numpy as np
+import argparse
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
-from torchvision import transforms as T
-import sys
-import logging
 from tqdm import tqdm
 
-from datasets import SpatialStreamDataset, TemporalStreamDataset, TwoStreamVideoDataset
+from data.datasets import SpatialStreamDataset, TemporalStreamDataset, TwoStreamVideoDataset
 from model import SpatialStream, TemporalStream
-from utils import save_metrics
-from config import ROOT_DIR, SAVE_DIR
-from transforms import *
+from config import ROOT_DIR, SAVE_DIR, NUM_CLASSES
+from data.transforms import spatial_eval_tfms, flow_tfms
+from engine.evaluator import Evaluator
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def get_args():
+    parser = argparse.ArgumentParser(description="Test Two-Stream CNN")
 
-test_tfms_rgb = spatial_eval_tfms()
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--num_workers", type=int, default=4)
 
-test_tfms_flow = flow_tfms()
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--root_dir", default=ROOT_DIR)
+    parser.add_argument("--save_dir", default=SAVE_DIR)
 
-test_dataset_spatial = SpatialStreamDataset(
-    root_dir=ROOT_DIR, split='test', transform=test_tfms_rgb
-)
-test_loader_spatial = DataLoader(
-    test_dataset_spatial, batch_size=32, shuffle=False, num_workers=0
-)
+    parser.add_argument("--spatial_weights", default="spatial_stream_best.pth")
+    parser.add_argument("--temporal_weights", default="temporal_stream_best.pth")
 
-test_dataset_temporal = TemporalStreamDataset(
-    root_dir=ROOT_DIR, split='test',
-    transform_flow=test_tfms_flow)
+    parser.add_argument("--evaluate_spatial", action="store_true")
+    parser.add_argument("--evaluate_temporal", action="store_true")
+    parser.add_argument("--evaluate_fusion", action="store_true")
 
-test_loader_temporal = DataLoader(
-    test_dataset_temporal, batch_size=32, shuffle=False, num_workers=0
-)
-
-test_dataset_twostream = TwoStreamVideoDataset(
-    root_dir=ROOT_DIR, split='test',
-    transform_flow=test_tfms_flow, transform_rgb=test_tfms_rgb
-)
-test_loader_twostream = DataLoader(
-    test_dataset_twostream, batch_size=32, shuffle=False, num_workers=0
-)
-
-# Load models
-models = [SpatialStream(10).to(device), TemporalStream().to(device)]
-
-for indx, weight_name in enumerate(['spatial_stream_best.pth', 'temporal_stream_best.pth']):
-    weights = os.path.join(SAVE_DIR, weight_name)
-    ckpt = torch.load(weights, map_location=device)
-    models[indx].load_state_dict(ckpt["model_state"])
-
-criterion = nn.CrossEntropyLoss()
-
-def evaluate_single(model, loader, name="Model"):
-    """Evaluate single model performance."""
-    model.eval()
-    correct, total, total_loss = 0, 0, 0.0
-    with torch.no_grad():
-        for data, target in tqdm(loader, desc=f"{name} [Eval]", leave=False):
-            data, target = data.to(device), target.to(device)
-            if data.ndim == 5 and name == "Spatial Stream":
-                B, N, C, H, W = data.shape
-                data = data.view(B * N, C, H, W)
-                outputs = model(data)
-                outputs = outputs.view(B, N, -1).mean(dim=1)
-            else:
-                outputs = model(data)
-
-            loss = criterion(outputs, target)
-            total_loss += loss.item() * target.size(0)
-            correct += (outputs.argmax(1) == target).sum().item()
-            total += target.size(0)
-
-    avg_loss = total_loss / total
-    acc = correct / total
-    print(f"{name:>15} | Loss: {avg_loss:.4f} | Acc: {acc*100:.2f}%")
-    return acc, avg_loss
+    return parser.parse_args()
 
 
-print("Evaluating Spatial Stream...")
-spatial_acc, spatial_loss = evaluate_single(models[0], test_loader_spatial, "Spatial Stream")
+def main():
+    args = get_args()
 
-print("Evaluating Temporal Stream...")
-temporal_acc, temporal_loss = evaluate_single(models[1], test_loader_temporal, "Temporal Stream")
+    device = torch.device(args.device)
 
-# Fusion evaluation
-print("Evaluating Fused Predictions")
-fusion_correct, fusion_total, fusion_loss = 0, 0, 0.0
-with torch.no_grad():
-    for rgb, flow, target in tqdm(test_loader_twostream, desc="Fusion [Eval]", leave=False):
-        rgb, flow, target = rgb.to(device), flow.to(device), target.to(device)
-        logits_rgb = models[0](rgb)
-        logits_flow = models[1](flow)
-        logits_fused = (logits_rgb + logits_flow) / 2.0
+    # Transforms
+    test_tfms_rgb = spatial_eval_tfms()
+    test_tfms_flow = flow_tfms()
 
-        loss = criterion(logits_fused, target)
-        fusion_loss += loss.item() * target.size(0)
-        preds = logits_fused.argmax(1)
-        fusion_correct += (preds == target).sum().item()
-        fusion_total += target.size(0)
+    # Datasets & loaders
+    test_loader_spatial = DataLoader(
+        SpatialStreamDataset(args.root_dir, split="test", transform=test_tfms_rgb),
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers
+    )
 
-fusion_acc = fusion_correct / fusion_total
-fusion_loss = fusion_loss / fusion_total
+    test_loader_temporal = DataLoader(
+        TemporalStreamDataset(args.root_dir, split="test", transform_flow=test_tfms_flow),
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers
+    )
 
-print(f"Spatial Stream  Acc: {100*spatial_acc:.2f}%")
-print(f"Temporal Stream Acc: {100*temporal_acc:.2f}%")
-print(f"Fused (Average) Acc: {100*fusion_acc:.2f}%")
+    test_loader_twostream = DataLoader(
+        TwoStreamVideoDataset(args.root_dir, split="test",
+                              transform_rgb=test_tfms_rgb, transform_flow=test_tfms_flow),
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers
+    )
+
+    # Load models
+    spatial_model = SpatialStream(NUM_CLASSES).to(device)
+    temporal_model = TemporalStream().to(device)
+
+    spatial_path = os.path.join(args.save_dir, args.spatial_weights)
+    temporal_path = os.path.join(args.save_dir, args.temporal_weights)
+
+    spatial_model.load_state_dict(torch.load(spatial_path, map_location=device)["model_state"])
+    temporal_model.load_state_dict(torch.load(temporal_path, map_location=device)["model_state"])
+
+    evaluator = Evaluator(device=device)
+
+    # Evaluate
+    if args.evaluate_spatial or (not args.evaluate_temporal and not args.evaluate_fusion):
+        print("\nEvaluating Spatial Stream...")
+        s_acc, _ = evaluator.evaluate_single(spatial_model, test_loader_spatial, "Spatial Stream", is_spatial=True)
+        print(f"Spatial Stream Acc: {s_acc * 100:.2f}%")
+
+    if args.evaluate_temporal:
+        print("\nEvaluating Temporal Stream...")
+        t_acc, _ = evaluator.evaluate_single(temporal_model, test_loader_temporal, "Temporal Stream", is_spatial=False)
+        print(f"Temporal Stream Acc: {t_acc * 100:.2f}%")
+
+    if args.evaluate_fusion:
+        print("\nEvaluating Fusion...")
+        f_acc, _ = evaluator.evaluate_fusion(spatial_model, temporal_model, test_loader_twostream)
+        print(f"Fused Stream Acc: {f_acc * 100:.2f}%")
+
+
+if __name__ == "__main__":
+    main()
