@@ -40,9 +40,9 @@ python train.py --stream temporal --epochs 25 --batch_size 8 --lr 1e-4
 ```
 ### 3-Evaluate both model and fusion on the Test Set
 ```bash
-python test.py
+python test.py --evaluate_spatial --evaluate_temporal
 ```
-### Command-Line Arguments
+### Command-Line Arguments (train.py)
 | Argument         | Description                                     | Default                               |
 | ---------------- | ----------------------------------------------- | ------------------------------------- |
 | `--stream`       | Which stream to train (`spatial` or `temporal`) | **Required**                          |
@@ -55,6 +55,20 @@ python test.py
 | `--root_dir`     | Root directory of dataset                       | `ROOT_DIR`                            |
 | `--save_dir`     | Directory to save results                       | `SAVE_DIR`                            |
 | `--num_workers`  | Number of DataLoader workers                    | `4`                                   |
+
+### Command-Line Arguments (test.py)
+| Argument              | Description                                               | Default                     |
+| --------------------- | --------------------------------------------------------- | --------------------------- |
+| `--batch_size`        | Batch size for evaluation                                 | `32`                        |
+| `--num_workers`       | Number of DataLoader workers                              | `4`                         |
+| `--device`            | Device to test on (`cuda` or `cpu`)                       | *Auto-detected*             |
+| `--root_dir`          | Root directory of dataset                                 | `ROOT_DIR`                  |
+| `--save_dir`          | Directory containing saved weights                        | `SAVE_DIR`                  |
+| `--spatial_weights`   | Spatial stream checkpoint filename                        | `spatial_stream_best.pth`   |
+| `--temporal_weights`  | Temporal stream checkpoint filename                       | `temporal_stream_best.pth`  |
+| `--evaluate_spatial`  | Evaluate only the spatial stream                          | `False` *(off unless used)* |
+| `--evaluate_temporal` | Evaluate only the temporal stream                         | `False` *(off unless used)* |
+| `--evaluate_fusion`   | Evaluate fused stream (spatial + temporal average logits) | `False` *(off unless used)* |
 
 ##  Dataset Layout
 Your dataset folder should be organized as:
